@@ -1,0 +1,45 @@
+# The host that notifies (one of the pair): Alertmanager, merged over compose.yml by the include block
+# (`path: [ting/deploy/compose.yml, ting/deploy/compose.notify.yml]`). Its site.env sets
+# VMALERT_NOTIFIER=-notifier.url=http://alertmanager:9093; the other host's says -notifier.blackhole.
+# Should this host or its VictoriaMetrics be down, the exporters' own health checks notify Home Assistant
+# directly (TING_HEALTH_CHECKS, design 0.3).
+
+services:
+  alertmanager:
+    image: prom/alertmanager:${ALERTMANAGER_VERSION:?set ALERTMANAGER_VERSION in site.env}
+    container_name: alertmanager
+    restart: unless-stopped
+    user: "${TING_UID}:${TING_GID}"            # reads the 0600 webhook secret
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --web.listen-address=:9093
+      - --cluster.listen-address=              # one instance, no gossip port
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - {type: bind, source: "${DATA_ROOT}/alertmanager", target: /alertmanager, bind: {create_host_path: false}}  # silences, log
+      - type: bind
+        source: ${DATA_ROOT}/.ssd-mounted
+        target: /ssd-check
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ../../secrets/alert
+        target: /run/secrets/alert
+        read_only: true
+        bind: {create_host_path: false}
+    mem_limit: 64m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9093/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  vmalert:
+    depends_on: [victoriametrics, alertmanager]

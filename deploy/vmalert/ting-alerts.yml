@@ -1,0 +1,117 @@
+# vmalert alerting rules (design 9.1). Both hosts evaluate them (so the dashboard's alert markers work on both
+# stores); only the notifying host sends them to Alertmanager, which delivers to the Home Assistant webhook.
+# The exporters' external health checks (TING_HEALTH_CHECKS) cover this chain itself being down.
+# tests/test_deploy.py checks that every metric named here exists.
+groups:
+  - name: ting_alerts
+    interval: 1m
+    rules:
+      # ---- exporter and stream --------------------------------------------------
+      - alert: TingExporterDown
+        expr: up{job="ting-exporter"} == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "ting-exporter on {{ $labels.host }} is not answering /metrics"
+      - alert: TingSensorSilent
+        # ting_stream_up exists for every streamed sensor from the start, so a sensor that never delivered fires too
+        expr: ting_stream_up == 0
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "No Ting samples from {{ $labels.serial }} (site {{ $labels.site }}) for 10 min at {{ $labels.host }}"
+      - alert: TingAuthProblem
+        expr: ting_auth_state > 0
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Ting sign-in failing on {{ $labels.host }} (state {{ $value }}); 2 = held: write the right password to ~/stack/secrets/ting/ting_password"
+      - alert: TingPushLag
+        expr: ting_push_lag_seconds > 600
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.host }} is {{ $value | humanizeDuration }} behind pushing to store {{ $labels.target }}; the outbox keeps the samples"
+      - alert: TingDataDropped
+        expr: increase(ting_push_samples_total{result=~"dropped|rejected"}[15m]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "ting-exporter on {{ $labels.host }} lost or had samples refused ({{ $labels.result }}, store {{ $labels.target }})"
+      - alert: TingOutboxWriteErrors
+        expr: increase(ting_outbox_errors_total[15m]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "The outbox on {{ $labels.host }} cannot write its disk; samples are kept in memory (at most 50 000)"
+      - alert: TingTimestampFallback
+        expr: increase(ting_timestamp_fallback_total[15m]) > 0
+        labels: {severity: info}
+        annotations:
+          summary: "Device timestamps of {{ $labels.serial }} fail the arrival guard on {{ $labels.host }}; using arrival time"
+      - alert: TingDataIncomplete
+        # a sum, so missing minutes count; offset 2m skips the minutes whose rollups are not written yet
+        expr: sum_over_time(ting:voltage_volts:count_1m[1h] offset 2m) < 0.95 * 4 * 3600
+        for: 30m
+        labels: {severity: info}
+        annotations:
+          summary: "{{ $labels.serial }} delivered {{ $value | printf \"%.0f\" }} of 14400 samples (4 per second) in an hour"
+      - alert: TingRollupsMissing
+        expr: absent_over_time(ting:voltage_volts:avg_1m[10m])
+        labels: {severity: warning}
+        annotations:
+          summary: "No 1-minute rollups for 10 min (vmalert down, or no raw data)"
+      - alert: TingFlightRecorderErrors
+        expr: increase(ting_record_errors_total[1h]) > 0
+        labels: {severity: info}
+        annotations:
+          summary: "The flight recorder on {{ $labels.host }} could not write (disk full?)"
+      - alert: TingTaskCrashLoop
+        # a task that keeps crashing is not cured by a restart, and every restart costs a sign-in
+        expr: increase(ting_task_restarts_total[15m]) > 3
+        labels: {severity: warning}
+        annotations:
+          summary: "ting-exporter task {{ $labels.task }} on {{ $labels.host }} keeps crashing ({{ $value | printf \"%.0f\" }} restarts in 15 min)"
+
+      # ---- what Ting itself reports (REST, design 0.5) -----------------------------
+      - alert: TingHazard
+        expr: max_over_time(ting_hazard_state[15m]) >= 3 or max_over_time(ting_fire_detected[15m]) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: "Ting reports a hazard at site {{ $labels.site }} (state {{ $value }}: 3 elevated, 4 power quality, 5 fire)"
+
+      # ---- VictoriaMetrics and the data disk ------------------------------------
+      - alert: VictoriaMetricsDataSizeHigh
+        expr: sum(vm_data_size_bytes{job="victoria-metrics"}) > 90e9
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: "VictoriaMetrics holds {{ $value | humanize1024 }}B, over 90 GB"
+      - alert: RecordingsDiskLow
+        expr: min(vm_free_disk_space_bytes{job="victoria-metrics"}) < 25e9
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "The data disk has {{ $value | humanize1024 }}B free; VictoriaMetrics stops writing below 10 GB"
+      - alert: RecordingsDiskCritical
+        expr: max(vm_storage_is_read_only{job="victoria-metrics"}) > 0 or min(vm_free_disk_space_bytes{job="victoria-metrics"}) < 12e9
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "The data disk is (nearly) full: VictoriaMetrics is or will soon be read-only; the outboxes keep the data"
+      - alert: VictoriaMetricsRowsRejected
+        expr: sum(increase(vm_rows_invalid_total{job="victoria-metrics"}[15m])) + sum(increase(vm_rows_ignored_total{job="victoria-metrics"}[15m])) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "VictoriaMetrics dropped {{ $value }} rows (it answers 204 even so; check its log)"
+      - alert: VmalertDown
+        expr: up{job="vmalert"} == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "vmalert on {{ $labels.host }} is down: no rollups, no alerts (this one will not fire either)"
+
+      # ---- power quality (informational): ANSI C84.1 Range A service voltage 114-126 V ----
+      - alert: TingVoltageOutsideRangeA
+        expr: ting:voltage_volts:min_1m < 114 or ting:voltage_volts:max_1m > 126
+        labels: {severity: info}
+        annotations:
+          summary: "Site {{ $labels.site }}: voltage {{ $value }} V outside 114-126 V"

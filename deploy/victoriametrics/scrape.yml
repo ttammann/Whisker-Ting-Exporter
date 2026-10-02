@@ -1,0 +1,9 @@
+# What VictoriaMetrics scrapes; its own metrics come from -selfScrapeInterval (job="victoria-metrics").
+# %{TING_HOST} is the container's environment (deploy/compose.yml): every alert on these series names its host.
+global:
+  scrape_interval: 30s
+scrape_configs:
+  - job_name: ting-exporter
+    static_configs: [{targets: ["ting-exporter:9786"], labels: {host: "%{TING_HOST}"}}]
+  - job_name: vmalert
+    static_configs: [{targets: ["vmalert:8880"], labels: {host: "%{TING_HOST}"}}]

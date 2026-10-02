@@ -1,0 +1,5 @@
+#!/bin/sh
+# Leak guard (design 13.2): the lines this commit adds may hold nothing from the private overlay
+# (serials, addresses, host names, users, e-mails, its term list) and no real IP, e-mail or serial.
+# Installed by `python3 tools/overlay.py install-hooks`.
+exec python3 "$(git rev-parse --show-toplevel)/tools/overlay.py" leakcheck --staged

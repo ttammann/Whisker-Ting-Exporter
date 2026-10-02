@@ -1,0 +1,11 @@
+# Extra vmalert rules for these sites (bundled into deploy/vmalert/). Example: a site whose voltage runs high.
+groups:
+  - name: site_rules
+    interval: 1m
+    rules:
+      - alert: SiteBVoltageHigh
+        expr: ting:voltage_volts:avg_1m{site="b"} > 125
+        for: 30m
+        labels: {severity: info}
+        annotations:
+          summary: "Site b has averaged over 125 V for 30 minutes"

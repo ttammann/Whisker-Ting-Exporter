@@ -1,0 +1,30 @@
+# Every alert, firing and resolved, to the Home Assistant webhook (design 9.1).
+# The webhook URL is a secret file, not in git: ~/stack/secrets/alert/alert_webhook_url, mounted as a directory.
+# The exporters' health checks post to the same URL, in the same format (TingHealthCheckFailing).
+route:
+  receiver: home-assistant
+  group_by: [alertname, serial, site, target, host]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+  routes:
+    - matchers: ['severity="info"']
+      receiver: home-assistant
+      repeat_interval: 7d
+
+receivers:
+  - name: home-assistant
+    webhook_configs:
+      - url_file: /run/secrets/alert/alert_webhook_url
+        send_resolved: true
+        max_alerts: 20
+
+inhibit_rules:
+  # a dead exporter explains silent sensors and missing rollups
+  - source_matchers: ['alertname="TingExporterDown"']
+    target_matchers: ['alertname=~"TingSensorSilent|TingRollupsMissing|TingDataIncomplete"']
+  # a full local disk explains the lag towards the local store, not the peer's (it has its own disk)
+  - source_matchers: ['alertname="RecordingsDiskCritical"']
+    target_matchers: ['alertname="TingPushLag"', 'target="local"']
+  - source_matchers: ['alertname="RecordingsDiskCritical"']
+    target_matchers: ['alertname="RecordingsDiskLow"']

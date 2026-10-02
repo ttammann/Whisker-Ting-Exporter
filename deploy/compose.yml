@@ -1,0 +1,152 @@
+# The Ting stack for one host: VictoriaMetrics, vmalert and ting-exporter (design 10, 13).
+#
+# Not run on its own: the host's own ~/stack/docker-compose.yml includes it, with the host's values
+# (site.env, from the private overlay) and its secrets (secrets/ting.env), e.g. on the host that notifies:
+#
+#   include:
+#     - path: [ting/deploy/compose.yml, ting/deploy/compose.notify.yml]
+#       env_file: [ting/site.env, secrets/ting.env]
+#
+# and on the other host `path: ting/deploy/compose.yml`. `ting/` is the bundle from `tools/overlay.py bundle`,
+# replaced on every deploy; relative paths below resolve inside ting/deploy/, so `../../secrets` is
+# ~/stack/secrets. Every value without a default must be set, or `docker compose config` refuses:
+#
+#   site.env          VM_VERSION, PYTHON_IMAGE (pinned by digest), VM_LISTEN, DATA_ROOT, TING_UID, TING_GID,
+#                     TING_HOST, TING_ROLE, TING_SITES, TING_VM_URLS, TING_HEALTH_CHECKS, VMALERT_NOTIFIER
+#   secrets/ting.env  VM_ADMIN_KEY, TING_USERNAME
+#   secrets/ting/ting_password, secrets/alert/alert_webhook_url (directories mounted, not files: design 6.9)
+#
+# DATA_ROOT is the data disk; DATA_ROOT/.ssd-mounted and the data directories must exist (create_host_path: false
+# everywhere), so nothing ever writes to the root disk when the data disk is not mounted: the
+# containers refuse to start instead.
+
+x-ssd-guard: &ssd-guard
+  type: bind
+  source: ${DATA_ROOT:?set DATA_ROOT in site.env}/.ssd-mounted
+  target: /ssd-check
+  read_only: true
+  bind: {create_host_path: false}
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "10m", max-file: "3"}
+
+services:
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:${VM_VERSION:?set VM_VERSION in site.env}
+    container_name: victoriametrics
+    restart: unless-stopped
+    user: "${TING_UID:?set TING_UID in site.env}:${TING_GID:?set TING_GID in site.env}"
+    command:
+      - -storageDataPath=/storage
+      - -retentionPeriod=5y                   # 5 years: about 1 GB a year for two sensors
+      - -dedup.minScrapeInterval=1ms          # both exporters write the same samples; retries and replays collapse
+      - -promscrape.config=/etc/victoriametrics/scrape.yml
+      - -selfScrapeInterval=60s               # job="victoria-metrics": vm_data_size_bytes, vm_free_disk_space_bytes
+      - -memory.allowedBytes=512MiB           # fixed: a kernel without the memory cgroup ignores mem_limit
+      - -storage.minFreeDiskSpaceBytes=10GB   # VictoriaMetrics stops accepting data below this; the outboxes keep it
+      - -search.maxQueryDuration=60s
+      # every admin endpoint needs ?authKey=$VM_ADMIN_KEY; reads and writes stay open (LAN and tunnel only)
+      - -deleteAuthKey=${VM_ADMIN_KEY:?set VM_ADMIN_KEY in secrets/ting.env}
+      - -snapshotAuthKey=${VM_ADMIN_KEY}
+      - -forceMergeAuthKey=${VM_ADMIN_KEY}
+      - -forceFlushAuthKey=${VM_ADMIN_KEY}
+      - -search.resetCacheAuthKey=${VM_ADMIN_KEY}
+      - -pprofAuthKey=${VM_ADMIN_KEY}
+      - -flagsAuthKey=${VM_ADMIN_KEY}
+      - -configAuthKey=${VM_ADMIN_KEY}
+      - -reloadAuthKey=${VM_ADMIN_KEY}
+      - -logNewSeriesAuthKey=${VM_ADMIN_KEY}
+      - -metricNamesStatsResetAuthKey=${VM_ADMIN_KEY}
+    environment:
+      TING_HOST: ${TING_HOST:?set TING_HOST in site.env}   # %{TING_HOST} in scrape.yml
+    ports:
+      - "${VM_LISTEN:?set VM_LISTEN in site.env}:8428:8428"   # one LAN address: the LAN and the tunnel, never a router
+                                                                # port forward; the address must be up before Docker starts
+    volumes:
+      - {type: bind, source: "${DATA_ROOT}/victoriametrics", target: /storage, bind: {create_host_path: false}}
+      - ./victoriametrics/scrape.yml:/etc/victoriametrics/scrape.yml:ro
+      - *ssd-guard
+    mem_limit: 640m
+    cpus: 1.0
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8428/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *logging
+
+  vmalert:
+    image: victoriametrics/vmalert:${VM_VERSION}
+    container_name: vmalert
+    restart: unless-stopped
+    user: "${TING_UID}:${TING_GID}"
+    command:
+      - -datasource.url=http://victoriametrics:8428
+      - -remoteWrite.url=http://victoriametrics:8428     # rollups and ALERTS series
+      - -remoteRead.url=http://victoriametrics:8428      # alert state survives a restart
+      - -rule=/etc/vmalert/*.yml                         # rollups, alerts, and the overlay's extra rule files
+      - -evaluationInterval=1m
+      - -memory.allowedBytes=64MiB
+      - ${VMALERT_NOTIFIER:?set VMALERT_NOTIFIER in site.env, to -notifier.url=http://alertmanager:9093 or -notifier.blackhole}
+      - -external.url=http://${VM_LISTEN}:8428/vmui/
+      # no -external.label: it would label the rollups too, and the exporter's rollup repair writes them without it
+    volumes:
+      - ./vmalert:/etc/vmalert:ro
+    depends_on: [victoriametrics]
+    mem_limit: 96m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging                          # no published port
+
+  ting-exporter:
+    image: ting-exporter:3.0.0
+    build:
+      context: ..
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?pin python:3.13-slim@sha256:... in site.env}
+    container_name: ting-exporter
+    restart: unless-stopped                    # the watchdog exits 1 when the exporter is wedged: this starts it again
+    user: "${TING_UID}:${TING_GID}"
+    environment:
+      TING_USERNAME: ${TING_USERNAME:?set TING_USERNAME in secrets/ting.env}
+      TING_PASSWORD_FILE: /run/secrets/ting/ting_password
+      TING_ALERT_WEBHOOK_FILE: /run/secrets/alert/alert_webhook_url
+      TING_HOST: ${TING_HOST}
+      TING_ROLE: ${TING_ROLE:?set TING_ROLE in site.env}
+      TING_SITES: ${TING_SITES:?set TING_SITES in site.env}
+      TING_VM_URLS: ${TING_VM_URLS:?set TING_VM_URLS in site.env}
+      TING_HEALTH_CHECKS: ${TING_HEALTH_CHECKS:?set TING_HEALTH_CHECKS in site.env}
+      TING_OUTBOX_DIR: /data/outbox
+      TING_RECORD_DIR: /data/raw
+      TING_STATE_FILE: /data/state.json
+    volumes:
+      - {type: bind, source: "${DATA_ROOT}/ting", target: /data, bind: {create_host_path: false}}   # outbox/, raw/, state.json
+      - *ssd-guard
+      - type: bind                             # the directory, not the file: a file mount pins the inode, so a
+        source: ../../secrets/ting             # password file an editor replaced would go unseen
+        target: /run/secrets/ting
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ../../secrets/alert
+        target: /run/secrets/alert
+        read_only: true
+        bind: {create_host_path: false}
+    tmpfs: [/tmp]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 160m
+    cpus: 0.5
+    stop_grace_period: 20s
+    depends_on: [victoriametrics]
+    healthcheck:                               # marks the container unhealthy only; the watchdog inside restarts it
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(urllib.request.urlopen('http://127.0.0.1:9786/healthz',timeout=4).status!=200)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    logging: *logging                          # no published port: VictoriaMetrics scrapes it on the compose network

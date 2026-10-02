@@ -1,0 +1,29 @@
+# Home Assistant automation: Alertmanager webhook -> phone notification.
+# Paste into automations.yaml (or Settings > Automations > new > Edit in YAML, then pick a webhook id there).
+# Put the webhook id in secrets.yaml as `ting_alert_webhook_id: <long random string>`; the same id ends
+# the URL in ~/stack/secrets/alert/alert_webhook_url on each host. Replace notify.notify with your phone,
+# e.g. notify.mobile_app_<phone>. It shows Alertmanager's alerts and the exporters' own health checks
+# (TingHealthCheckFailing), which use the same format. On a host whose exporter posts to another host's
+# Home Assistant, set local_only: false (the webhook id is then the only protection: keep it long).
+- id: ting_alertmanager_webhook
+  alias: "Ting / VictoriaMetrics alert"
+  mode: queued
+  max: 20
+  trigger:
+    - platform: webhook
+      webhook_id: !secret ting_alert_webhook_id
+      allowed_methods: [POST]
+      local_only: true          # Alertmanager runs on the same host (Docker bridge = private network)
+  action:
+    - repeat:
+        for_each: "{{ trigger.json.alerts }}"
+        sequence:
+          - service: notify.notify
+            data:
+              title: >-
+                {{ 'RESOLVED' if repeat.item.status == 'resolved' else (repeat.item.labels.severity | default('alert') | upper) }}:
+                {{ repeat.item.labels.alertname }}
+              message: >-
+                {{ repeat.item.annotations.summary | default(repeat.item.labels.alertname) }}
+                {%- if repeat.item.labels.site is defined %} (site {{ repeat.item.labels.site }}){% endif %}
+                since {{ as_timestamp(repeat.item.startsAt) | timestamp_custom('%Y-%m-%d %H:%M') }}

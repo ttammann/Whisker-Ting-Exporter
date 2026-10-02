@@ -1,0 +1,15 @@
+.git
+.venv
+.pytest_cache
+**/__pycache__
+*.egg-info
+tests
+docs
+tools
+deploy
+overlay
+overlay.example
+secrets
+site.env
+compose.override.yml
+.env

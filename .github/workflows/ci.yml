@@ -1,0 +1,16 @@
+# Public CI: the offline test suite and the leak guard's public rules (no overlay here, design 13.2).
+name: ci
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -e ".[test]"
+      - run: python tools/overlay.py leakcheck --public
+      - run: pytest

@@ -1,0 +1,20 @@
+# The private overlay's manifest (design 13.2). This example is public; the real overlay lives in ./overlay
+# (gitignored), is its own git repository, and is checked by `python3 tools/overlay.py check`.
+contract = 1
+
+[hosts.host-a]
+role = "primary"
+address = "192.0.2.10"          # its LAN address: VM_LISTEN here, the peer's store URL on the other host
+ssh = "admin@192.0.2.10"        # only printed in the deploy commands; the tools never connect
+notify = false
+
+[hosts.host-b]
+role = "secondary"
+address = "198.51.100.10"
+ssh = "admin@198.51.100.10"
+notify = true                   # runs Alertmanager; exactly one host notifies
+
+[leak]
+# more words the leak guard refuses in the public repository (the overlay's own serials, addresses,
+# host names, users and e-mails are refused anyway)
+terms = ["Example Street"]

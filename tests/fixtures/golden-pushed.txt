@@ -1,0 +1,16 @@
+TNG000001 ting_frequency_hertz 2920
+TNG000001 ting_hifi 2920
+TNG000001 ting_thd_max_ratio 28
+TNG000001 ting_thd_min_ratio 28
+TNG000001 ting_thd_ratio 27
+TNG000001 ting_voltage_rolling_high_volts 15
+TNG000001 ting_voltage_rolling_low_volts 14
+TNG000001 ting_voltage_volts 2920
+TNG000002 ting_frequency_hertz 2756
+TNG000002 ting_hifi 2756
+TNG000002 ting_thd_max_ratio 26
+TNG000002 ting_thd_min_ratio 26
+TNG000002 ting_thd_ratio 26
+TNG000002 ting_voltage_rolling_high_volts 14
+TNG000002 ting_voltage_rolling_low_volts 14
+TNG000002 ting_voltage_volts 2756

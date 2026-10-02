@@ -1,0 +1,15 @@
+# Dashboard sites (tools/make_dashboard.py --sites-file). Colours: the categorical slots blue, orange, aqua, yellow.
+[dashboard]
+description = "Example: two Ting sensors at two sites, two exporters, a VictoriaMetrics at each site."
+
+[sites.a]
+name = "Example A"
+colour = "#3987e5"
+grid = "Eastern Interconnection"
+hifi = "about 10"
+
+[sites.b]
+name = "Example B"
+colour = "#d95926"
+grid = "Western Interconnection"
+hifi = "about 25"

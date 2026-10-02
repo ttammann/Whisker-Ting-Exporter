@@ -1,0 +1,11 @@
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.venv/
+build/
+dist/
+.env
+secrets/
+.DS_Store
+# the private overlay: its own git repository, never in this one (design 13.2)
+/overlay/
