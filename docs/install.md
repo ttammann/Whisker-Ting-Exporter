@@ -285,8 +285,21 @@ docker exec ting-exporter python -m ting_exporter repair --from 2026-01-01
 
 ## Updating, removing
 
-**Update:** a new bundle (step 3, including the swap it prints), then the dry run, build and start of steps 7
-and 8. Directories, secrets and Home Assistant stay as they are.
+**Update:** a new bundle (step 3, including the swap it prints), the dry run and build of step 7, then start with
+`--force-recreate`, as the bundle prints it. The swap moves the old bundle to `~/stack/ting.prev`, and a running
+container keeps its configuration mounts (vmalert's rules, the scrape and Alertmanager configs) on the directory
+it started with until it is recreated: it would go on with the old files, and lose them at the next swap.
+Directories, secrets and Home Assistant stay as they are. On the notifying host:
+
+```bash
+cd ~/stack && docker compose up -d --force-recreate victoriametrics alertmanager vmalert ting-exporter
+```
+
+On the other host:
+
+```bash
+cd ~/stack && docker compose up -d --force-recreate victoriametrics vmalert ting-exporter
+```
 
 **Remove:** stop and delete the Ting containers, then take the include block out of `~/stack/docker-compose.yml`.
 The data directories and secrets stay until you delete them.

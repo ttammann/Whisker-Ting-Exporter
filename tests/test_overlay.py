@@ -97,6 +97,7 @@ def test_bundle_prints_commands_and_connects_nowhere(tool, tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert "Nothing was copied or run" in result.stdout and "scp " in result.stdout
     assert "ting/deploy/compose.notify.yml" in result.stdout  # host-b notifies
+    assert "docker compose up -d --force-recreate victoriametrics vmalert alertmanager ting-exporter" in result.stdout
     [bundle] = list((repo / "overlay" / "build").glob("ting-host-b-*.tar.gz"))
     with tarfile.open(bundle) as tar:
         names = set(tar.getnames())

@@ -332,10 +332,12 @@ Dry run; only {services} may appear as created or recreated:
 
   cd ~/stack && docker compose config --quiet && docker compose up -d --dry-run 2>&1 | tail -20
 
-Build, check, start:
+Build, check, start. --force-recreate: the swap moved the old bundle to ting.prev, and a container keeps its
+configuration mounts on the directory it started with (vmalert's rules, the scrape and Alertmanager configs)
+until it is recreated; the next swap would delete those files under it:
 
   cd ~/stack && docker compose build ting-exporter && docker compose run --rm --no-deps ting-exporter check-config
-  cd ~/stack && docker compose up -d {services}
+  cd ~/stack && docker compose up -d --force-recreate {services}
 
 To go back to the previous bundle:
 
