@@ -760,7 +760,7 @@ releases.
 | Event loop wedged | loop guard thread | exit 1, Docker restarts | up to 2 min | TingExporterDown |
 | Host reboot or power loss | none | containers restart; one sign-in | downtime; the peer covers it | none or TingSensorSilent |
 | Host clock wrong after a cut | guard fallbacks | arrival stamps, logged | timing ± seconds | TingTimestampFallback |
-| Static IP not up when Docker starts | VictoriaMetrics fails to bind | enable the network manager's wait-online service | until fixed | VmalertDown or TingExporterDown |
+| Address or data disk not up when Docker starts | VictoriaMetrics fails to bind; guarded containers refuse to start | `net.ipv4.ip_nonlocal_bind=1`; Docker ordered after the disk's mount unit (install guide, step 4) | until fixed | VmalertDown or TingExporterDown |
 
 ---
 
@@ -914,8 +914,10 @@ Lean choices:
 - Mounts: `/data` (outbox, recorder, state) on the data disk; the password's directory read-only with
   `create_host_path: false`; the data disk's marker file with `create_host_path: false` on every service that
   uses the disk.
-- If VictoriaMetrics binds a specific address, Docker must start after the address exists: enable the network
-  manager's wait-online service, and test once with a reboot.
+- If VictoriaMetrics binds a specific address, it must be able to bind before the address exists
+  (`net.ipv4.ip_nonlocal_bind=1`: DHCP and Debian's `allow-hotplug` do not hold up the boot), and Docker must start
+  after the data disk is mounted (a drop-in `After=` its mount unit: `nofail` does not hold up the boot). Test once
+  with a reboot.
 
 ### 13.2 Repository and overlay
 - **One public repository** holds all code, a generic stack in `deploy/`, the overlay framework and an example

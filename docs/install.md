@@ -98,14 +98,31 @@ docker compose version; timedatectl show -p NTPSynchronized --value; findmnt "$D
 ```
 
 Expect a Compose version of 2.20 or later, `yes` for the time, the data disk mounted with its guard file,
-`VM_LISTEN` on an interface, and `id` equal to `TING_UID` and `TING_GID`. VictoriaMetrics binds that one
-address, so Docker must start only once it is up; the network manager's wait-online service does that:
+`VM_LISTEN` on an interface, and `id` equal to `TING_UID` and `TING_GID`.
+
+**Boot order.** At boot, Docker must not start the containers before the data disk is mounted (with `nofail` in
+`/etc/fstab` the boot does not wait for it, and every container with the disk guard then refuses to start), and
+VictoriaMetrics cannot bind `VM_LISTEN` before the host has that address (with DHCP, or Debian's `allow-hotplug`
+in `/etc/network/interfaces`, nothing waits for it either: `failed to bind host port ...: cannot assign requested
+address` in `journalctl -u docker`). Two settings fix both, whatever manages the network. Docker starts after the
+data disk is mounted (only ordered: if the disk is missing, Docker still starts and the guarded containers stay
+down, the others run):
 
 ```bash
-systemctl is-enabled NetworkManager-wait-online.service systemd-networkd-wait-online.service 2>/dev/null
+sudo mkdir -p /etc/systemd/system/docker.service.d && printf '[Unit]\nAfter=%s\n' "$(systemd-escape -p --suffix=mount "$DATA_ROOT")" | sudo tee /etc/systemd/system/docker.service.d/after-data-disk.conf && sudo systemctl daemon-reload
 ```
 
-The one your host uses must say `enabled` (`sudo systemctl enable` it otherwise).
+And services may bind an address the host does not have yet, so it does not matter how late DHCP is:
+
+```bash
+printf 'net.ipv4.ip_nonlocal_bind = 1\n' | sudo tee /etc/sysctl.d/90-docker-nonlocal-bind.conf && sudo sysctl --system | grep nonlocal
+```
+
+Check both, then reboot once when it suits you (Docker must be listed after the disk's mount):
+
+```bash
+systemctl show docker.service -p After | tr ' ' '\n' | grep -F "$(systemd-escape -p --suffix=mount "$DATA_ROOT")"; sysctl net.ipv4.ip_nonlocal_bind
+```
 
 ## 5. Host: directories and secrets
 
