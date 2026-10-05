@@ -88,10 +88,13 @@ mkdir -p ~/stack && touch ~/stack/docker-compose.yml
 
 ## 4. Host: check it (read-only)
 
-On the host, load its values into the shell. Do this in every new ssh session before the following steps:
+On the host, read its values into the shell, for the commands below. Do this in every new ssh session. Read,
+not exported (no `set -a`): Docker Compose takes an exported variable over `site.env`, so after the next bundle
+an old value from the shell would win over the new file (`TING_LOCATIONS: 'X' is not a site of TING_SITES`, or
+worse, nothing that shows):
 
 ```bash
-cd ~/stack/ting && set -a && . ./site.env && set +a && cd ~/stack && echo "$TING_HOST $DATA_ROOT $VM_LISTEN"
+cd ~/stack/ting && . ./site.env && cd ~/stack && echo "$TING_HOST $DATA_ROOT $VM_LISTEN"
 ```
 
 ```bash
