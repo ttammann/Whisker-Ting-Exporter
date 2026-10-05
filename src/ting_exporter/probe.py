@@ -85,7 +85,7 @@ async def probe(cfg: Config, seconds: float, release: bool | None = None) -> Non
     so it can run next to the exporters without ending their streams.
     """
     release = cfg.release_others if release is None else release
-    pipeline = Pipeline(cfg.sites, cfg.timestamp_source)
+    pipeline = Pipeline(cfg.sites, cfg.timestamp_source, cfg.locations)
     latest: dict[str, dict[str, str]] = {}
     targets: Counter[str] = Counter()
 

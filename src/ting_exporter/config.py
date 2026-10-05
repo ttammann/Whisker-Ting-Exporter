@@ -39,6 +39,7 @@ class Config:
     password_file: Path = Path(DEFAULT_PASSWORD_FILE)
     serials: tuple[str, ...] = ()
     sites: dict[str, str] = field(default_factory=dict)
+    locations: dict[str, str] = field(default_factory=dict)  # site -> location (power cuts); default: the site
     vm_targets: tuple[tuple[str, str], ...] = (("local", DEFAULT_VM_URL),)  # (name, base URL)
     role: str = "primary"
     host: str = "localhost"
@@ -162,6 +163,15 @@ class Config:
             if site in sites.values():  # restart detection compares a site's own high and low (design 5.1)
                 problems.append(f"TING_SITES: site {site!r} has two sensors; give the second its own site name")
             sites[serial] = site
+        locations: dict[str, str] = {}
+        for pair in (p.strip() for p in text("TING_LOCATIONS", "").split(",") if p.strip()):
+            site, sep, location = (x.strip() for x in pair.partition("="))
+            if not sep or not NAME.match(site) or not NAME.match(location):
+                problems.append(f"TING_LOCATIONS: {pair!r} is not site=location")
+            elif sites and site not in sites.values():
+                problems.append(f"TING_LOCATIONS: {site!r} is not a site of TING_SITES")
+            else:
+                locations[site] = location
 
         source = text("TING_TIMESTAMP_SOURCE", "device").lower()
         if source not in ("device", "arrival"):
@@ -194,6 +204,7 @@ class Config:
             password_file=password_file,
             serials=serials,
             sites=sites,
+            locations=locations,
             vm_targets=vm_targets,
             role=role,
             host=host_name,

@@ -177,6 +177,8 @@ class Overlay:
             if key in ea and key in eb and (sites_of(ea[key]) if key == "TING_SITES" else ea[key]) != \
                     (sites_of(eb[key]) if key == "TING_SITES" else eb[key]):
                 problems.append(f"{key} differs between {a} and {b}: both stores must hold the same series")
+        if sites_of(ea.get("TING_LOCATIONS", "")) != sites_of(eb.get("TING_LOCATIONS", "")):  # optional, but alike
+            problems.append(f"TING_LOCATIONS differs between {a} and {b}: both must infer the same power cuts")
         for host, env, other in ((a, ea, sb), (b, eb, sa)):
             peer = f"http://{other.get('address')}:8428"
             if peer not in named_urls(env.get("TING_VM_URLS", "")).values():

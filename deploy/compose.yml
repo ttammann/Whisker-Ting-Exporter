@@ -117,6 +117,7 @@ services:
       TING_HOST: ${TING_HOST}
       TING_ROLE: ${TING_ROLE:?set TING_ROLE in site.env}
       TING_SITES: ${TING_SITES:?set TING_SITES in site.env}
+      TING_LOCATIONS: ${TING_LOCATIONS:-}               # site=location for sites on one power feed (optional)
       TING_VM_URLS: ${TING_VM_URLS:?set TING_VM_URLS in site.env}
       TING_HEALTH_CHECKS: ${TING_HEALTH_CHECKS:?set TING_HEALTH_CHECKS in site.env}
       TING_OUTBOX_DIR: /data/outbox

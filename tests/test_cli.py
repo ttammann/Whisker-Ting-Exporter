@@ -382,3 +382,12 @@ def test_probe_rest_prints_what_the_registry_reads(tmp_path, capsys):
     assert "/api/v1/Users/{user_id}/conditions: ok" in out and f"/api/v1/FrozenPipe/{fakes.SERIAL_A}: GET" in out
     assert "ting_outdoor_temperature_celsius     -3.25" in out and "ting_frozen_pipe_level               55.0" in out
     assert "person@example.org" not in out  # the account record is shown by its devices only
+
+
+def test_locations():
+    cfg = Config.from_env({"TING_SITES": "TNG000001=a,TNG000003=Testing", "TING_LOCATIONS": " Testing=a "},
+                          need_credentials=False)
+    assert cfg.locations == {"Testing": "a"}
+    with pytest.raises(ConfigError) as err:
+        Config.from_env({"TING_SITES": "TNG000001=a", "TING_LOCATIONS": "elsewhere=a,a b=c"}, need_credentials=False)
+    assert "'elsewhere' is not a site of TING_SITES" in str(err.value) and "'a b=c' is not site=location" in str(err.value)

@@ -398,7 +398,7 @@ async def serve(cfg: Config, stop: asyncio.Event | None = None, clock: Clock | N
         signal_stop(stop)
     session = aiohttp.ClientSession()
     identities = identities_for(session, cfg, clock)
-    pipeline = Pipeline(cfg.sites, cfg.timestamp_source)
+    pipeline = Pipeline(cfg.sites, cfg.timestamp_source, cfg.locations)
     outbox = make_outbox(cfg, clock)
     pushers = {name: Pusher(name, VmClient(session, url, name=f"VictoriaMetrics {name}"), outbox,
                             interval=cfg.push_interval, clock=clock) for name, url in cfg.vm_targets}

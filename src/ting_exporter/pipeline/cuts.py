@@ -37,7 +37,9 @@ at sites on different grids, went silent for 67 s and came back with their
 windows reset, seconds apart. Two grids do not lose power in the same minute;
 the cause was upstream (the Ting cloud). So a cut is held for HOLD_MS of the
 sensor's own device time after its return, and dropped (unattributed) if a
-sensor at another site also returned restarted within CORRELATE_MS of it. A
+sensor at another location also returned restarted within CORRELATE_MS of it.
+A location is a site unless TING_LOCATIONS says two sites share a power feed
+(a second sensor in the same house): a cut that restarts both stays a cut. A
 held cut is decided at the latest at shutdown or at the end of a replay
 (finish), and kept in the state file across a crash.
 
@@ -134,7 +136,7 @@ class _Sensor:
 
 
 class SilenceTracker:
-    def __init__(self, site_of: Callable[[str], str] | None = None) -> None:
+    def __init__(self, site_of: Callable[[str], str] | None = None) -> None:  # serial -> location
         self.sensors: dict[str, _Sensor] = {}
         self.site_of = site_of or (lambda serial: serial)
         self.restarts: list[tuple[str, int]] = []  # (serial, return ms) of every silence that ended in a restart
@@ -219,7 +221,7 @@ class SilenceTracker:
                         and abs(t - h.silence.end_ms) <= CORRELATE_MS]
             if together:
                 st.found["unattributed"] += 1
-                log.info("%s: restarted after %.0f s without samples, as did %s at another site within a minute: "
+                log.info("%s: restarted after %.0f s without samples, as did %s at another location within a minute: "
                          "upstream (the Ting cloud), not a power cut", h.silence.serial,
                          (h.silence.end_ms - h.silence.start_ms) / 1000, ", ".join(sorted(set(together))))
                 continue

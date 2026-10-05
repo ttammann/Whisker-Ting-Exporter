@@ -155,3 +155,19 @@ def test_a_held_cut_survives_a_crash_in_the_state():
     again.load(state, down_seconds=30)
     [cut] = feed(again, "A", T0 + 77_250, HOLD_MS / 1000 + 1, hi=123.1, lo=123.0)
     assert (cut.serial, cut.end_ms) == ("A", T0 + 77_000)
+
+
+def test_sites_on_one_power_feed_keep_their_cut():
+    """A second sensor in the same house (TING_LOCATIONS): a cut there restarts both, and stays a cut."""
+    from ting_exporter.pipeline import Pipeline
+
+    p = Pipeline({"A": "a", "T": "Testing", "B": "b"}, locations={"Testing": "a"})
+    assert [p.location(s) for s in ("A", "T", "B")] == ["a", "a", "b"]
+    t = SilenceTracker(p.location)
+    go_dark_and_return(t, "A", T0 + 77_000)
+    go_dark_and_return(t, "T", T0 + 78_000)
+    assert [s.serial for s in t.finish()] == ["A", "T"]
+    t = SilenceTracker(p.location)
+    go_dark_and_return(t, "T", T0 + 77_000)
+    go_dark_and_return(t, "B", T0 + 78_000)  # Testing is at a, B elsewhere: upstream
+    assert t.finish() == []

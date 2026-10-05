@@ -412,7 +412,7 @@ exporter infers them, where the facts are at hand:
   exporter's own stream), not to power at both sites. So a cut is held for 2 minutes of the sensor's own device
   time after its return and dropped if a sensor at another site came back restarted within a minute of it (both
   are counted as unattributed). A held cut is decided at the latest at shutdown or at the end of a replay, and
-  kept in the state file across a crash. One sensor's restart, or two at the same site, stays a cut. [Verified on
+  kept in the state file across a crash. One sensor's restart, or two at the same location (`TING_LOCATIONS`: sites on one power feed), stays a cut. [Verified on
   a recorded event: two sites back restarted 67 s later, seconds apart, no cut; a real 66-minute cut kept.]
 - Re-deriving the cuts after a change of these rules: delete the `ting_power_cut` series with the admin key, then
   `import --only ting_power_cut` each recorder into each store. [Verified: VictoriaMetrics takes a deleted series

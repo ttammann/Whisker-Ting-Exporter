@@ -47,19 +47,26 @@ class SensorStats:
 
 
 class Pipeline:
-    def __init__(self, sites: dict[str, str] | None = None, timestamp_source: str = "device") -> None:
+    def __init__(self, sites: dict[str, str] | None = None, timestamp_source: str = "device",
+                 locations: dict[str, str] | None = None) -> None:
         if timestamp_source not in ("device", "arrival"):
             raise ValueError("timestamp_source must be device or arrival")
         self.sites = dict(sites or {})
+        self.locations = dict(locations or {})  # site -> location: sites on one power feed (TING_LOCATIONS)
         self.timestamp_source = timestamp_source
         self.sensors: dict[str, SensorStats] = {}
         self.storage = StorageFilter()
         self.dedup = Dedup()
-        self.silences = SilenceTracker(self.site)
+        self.silences = SilenceTracker(self.location)
         self._arrival_ms: dict[tuple[str, str], int] = {}  # newest arrival stamp per (serial, metric)
 
     def site(self, serial: str) -> str:
         return self.sites.get(serial, UNKNOWN_SITE)
+
+    def location(self, serial: str) -> str:
+        """Where a sensor gets its power: the site, unless TING_LOCATIONS puts the site at another one's."""
+        site = self.site(serial)
+        return self.locations.get(site, site)
 
     def sensor(self, serial: str) -> SensorStats:
         stats = self.sensors.get(serial)

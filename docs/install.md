@@ -41,6 +41,7 @@ Then edit, in `overlay/`:
   |---|---|
   | `TING_HOST`, `TING_ROLE`, `VM_LISTEN` | the host's name, role and LAN address, as in `overlay.toml` |
   | `TING_SITES` | `serial=site,...`, the same on both hosts: one sensor per site, short site names |
+  | `TING_LOCATIONS` | optional, the same on both hosts: `site=location,...` for a site in the same building as another, so a power cut that restarts both sensors stays a cut |
   | `TING_VM_URLS` | `local=http://victoriametrics:8428,peer=http://OTHER-ADDRESS:8428` |
   | `TING_HEALTH_CHECKS` | `vm=http://victoriametrics:8428/health,vmalert=http://vmalert:8880/health,peer-vm=http://OTHER-ADDRESS:8428/health`, plus `alertmanager=http://alertmanager:9093/-/healthy` on the notifying host |
   | `VMALERT_NOTIFIER` | `-notifier.url=http://alertmanager:9093` on the notifying host, `-notifier.blackhole` on the other |

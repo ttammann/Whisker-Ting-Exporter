@@ -260,7 +260,7 @@ def main(argv: list[str] | None = None) -> None:
     elif command in ("replay", "import"):
         cfg = _config(need_credentials=False)
         window = (recorder.parse_when(args.start) if args.start else None, recorder.parse_when(args.end) if args.end else None)
-        pipeline = Pipeline(cfg.sites, cfg.timestamp_source)
+        pipeline = Pipeline(cfg.sites, cfg.timestamp_source, cfg.locations)
         paths = recorder.expand(args.files)
         only = {m.strip() for m in args.only.split(",") if m.strip()} if args.only else None
         totals = asyncio.run(replay.replay(paths, pipeline, vm_url=None if args.dry_run else (args.vm_url or cfg.vm_url),

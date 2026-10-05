@@ -80,6 +80,7 @@ Environment variables (design 7.6). The ones a deploy sets come from the host's 
 | `TING_USERNAME` | required | the Ting app e-mail (personal data: never logged) |
 | `TING_PASSWORD_FILE` | `/run/secrets/ting/ting_password` | the password, in its own mounted directory |
 | `TING_SITES` | | `serial=site,...`: labels, and the sensors to stream; one sensor per site |
+| `TING_LOCATIONS` | | `site=location,...` for sites on one power feed (a second sensor in the same house): a cut that restarts both stays a cut; otherwise two sites restarting together count as upstream |
 | `TING_SERIALS` | | overrides the list; neither set: every sensor on the account |
 | `TING_VM_URLS` | `local=http://victoriametrics:8428` | push targets `name=url,...`; the first is the local store |
 | `TING_ROLE`, `TING_HOST` | `primary`, the host name | labels, logs, alerts |
