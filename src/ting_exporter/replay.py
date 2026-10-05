@@ -126,8 +126,10 @@ async def replay(
     speed: float = 0.0,
     window: tuple[float | None, float | None] = (None, None),
     out: TextIO | None = None,
+    only: set[str] | None = None,
 ) -> dict[str, int]:
-    """Run the files through `pipeline`; push to `vm_url` or print rollups. Returns totals."""
+    """Run the files through `pipeline`; push to `vm_url` or print rollups. Returns totals.
+    `only`: push (or roll up) these metrics and no others, e.g. the inferred cuts after a fix."""
     rollups = Rollups() if dry_run else None
     totals = {"records": 0, "invocations": 0, "samples": 0, "pushed": 0}
     first_t: float | None = None
@@ -136,13 +138,29 @@ async def replay(
     client = VmQuery(session, vm_url) if session and vm_url else None
     batch: list[str] = []
     last_t: float | None = None
+
+    async def emit(samples: list) -> None:
+        nonlocal batch
+        if only is not None:
+            samples = [s for s in samples if s.metric in only]
+        totals["samples"] += len(samples)
+        if rollups is not None:
+            rollups.add(samples, pipeline.sites)
+        if client is not None:
+            batch.extend(s.line() for s in samples)
+            if len(batch) >= PUSH_BATCH:
+                await _push(client, batch)
+                totals["pushed"] += len(batch)
+                batch = []
+
     try:
         for rec in recorder.read_records(paths, window):
             totals["records"] += 1
             t = float(rec["t"])
             kind = rec.get("kind")
             previous, last_t = last_t, t
-            if kind == "start":  # the exporter restarted: as the live one, it restores what it knew
+            if kind == "start":  # the exporter restarted: as the live one, it decided its held cuts, then restores
+                await emit(pipeline.finish())
                 pipeline.silences.restart(None if previous is None else max(0.0, t - previous))
                 continue
             if kind == "event":
@@ -157,15 +175,8 @@ async def replay(
                 if (ahead := (t - first_t) / speed - (time.monotonic() - started)) > 0:
                     await asyncio.sleep(ahead)
             samples, _ = pipeline.process(str(rec.get("serial")), str(rec.get("target")), rec.get("args") or [], t)
-            totals["samples"] += len(samples)
-            if rollups is not None:
-                rollups.add(samples, pipeline.sites)
-            if client is not None:
-                batch.extend(s.line() for s in samples)
-                if len(batch) >= PUSH_BATCH:
-                    await _push(client, batch)
-                    totals["pushed"] += len(batch)
-                    batch = []
+            await emit(samples)
+        await emit(pipeline.finish())
         if client is not None and batch:
             await _push(client, batch)
             totals["pushed"] += len(batch)

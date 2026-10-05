@@ -55,7 +55,7 @@ class Pipeline:
         self.sensors: dict[str, SensorStats] = {}
         self.storage = StorageFilter()
         self.dedup = Dedup()
-        self.silences = SilenceTracker()
+        self.silences = SilenceTracker(self.site)
         self._arrival_ms: dict[tuple[str, str], int] = {}  # newest arrival stamp per (serial, metric)
 
     def site(self, serial: str) -> str:
@@ -120,10 +120,20 @@ class Pipeline:
         if primary_ms is not None:
             values = {r.signal.key: r.value for r in readings}
             for silence in self.silences.primary(serial, primary_ms, arrival, values.get(_HIGH.key), values.get(_LOW.key)):
-                for ts, value in silence.points():
-                    st.emitted[silence.metric] += 1
-                    samples.append(Sample(silence.metric, serial, st.labels, ts, float(value), str(value)))
+                samples += self._silence_samples(silence)
         return samples, primary_ms is not None
+
+    def finish(self) -> list[Sample]:
+        """Cuts still held for the cross-site check, decided with what is known now (shutdown, end of a replay)."""
+        return [sample for silence in self.silences.finish() for sample in self._silence_samples(silence)]
+
+    def _silence_samples(self, silence: Any) -> list[Sample]:
+        st = self.sensor(silence.serial)
+        out = []
+        for ts, value in silence.points():
+            st.emitted[silence.metric] += 1
+            out.append(Sample(silence.metric, silence.serial, st.labels, ts, float(value), str(value)))
+        return out
 
     def _after_last_arrival(self, serial: str, metric: str, ts_ms: int) -> int:
         """An arrival stamp is this host's clock, not the sensor's: two frames can arrive in the same millisecond,

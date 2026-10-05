@@ -206,6 +206,7 @@ def _parser(command: str) -> argparse.ArgumentParser:
         p.add_argument("--speed", type=float, default=0.0, help="pace at N x recorded speed (default: at once)")
         p.add_argument("--from", dest="start", help="only records received at or after this time")
         p.add_argument("--to", dest="end", help="only records received before this time")
+        p.add_argument("--only", help="push only these metrics (comma-separated), e.g. ting_power_cut after a fix")
     elif command == "mark":
         p.add_argument("site", nargs="?")
         p.add_argument("assignment", nargs="?", help="CONTEXT=VALUE, e.g. source=inverter; CONTEXT= ends it")
@@ -261,8 +262,9 @@ def main(argv: list[str] | None = None) -> None:
         window = (recorder.parse_when(args.start) if args.start else None, recorder.parse_when(args.end) if args.end else None)
         pipeline = Pipeline(cfg.sites, cfg.timestamp_source)
         paths = recorder.expand(args.files)
+        only = {m.strip() for m in args.only.split(",") if m.strip()} if args.only else None
         totals = asyncio.run(replay.replay(paths, pipeline, vm_url=None if args.dry_run else (args.vm_url or cfg.vm_url),
-                                           dry_run=args.dry_run, speed=args.speed, window=window))
+                                           dry_run=args.dry_run, speed=args.speed, window=window, only=only))
         print(f"{len(paths)} files: {totals}", file=sys.stderr)
         print(replay.summary(pipeline), file=sys.stderr)
     else:

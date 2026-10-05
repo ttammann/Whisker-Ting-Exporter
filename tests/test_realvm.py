@@ -374,3 +374,26 @@ def test_a_mark_is_seen_at_once(tmp_path):
     assert hidden == []  # what a plain query sees: nothing, the mark is too new
     assert [m["value"] for m in listed] == ["first"]
     assert second[0].startswith('ting_context{context="probe",serial="TNG000001",site="a",value="first"} 0 ')
+
+
+def test_a_deleted_series_can_be_imported_again(tmp_path):
+    """The runbook's re-derivation of the inferred cuts: delete every ting_power_cut series with the admin key,
+    then import the corrected ones; the store must take the same series again and show only the new points."""
+    store = Store(tmp_path / "vmdelete")
+    try:
+        labels = 'serial="TNG000002",site="b"'
+        post(store.url, f"ting_power_cut{{{labels}}} 1 1790550000000\nting_power_cut{{{labels}}} 0 1790550120000\n"
+                        f'ting_power_cut{{serial="TNG000001",site="a"}} 1 1790550000000\n')
+        flush(store.url)
+        assert len(export(store.url, "ting_power_cut")) == 2
+        req = urllib.request.Request(f"{store.url}/api/v1/admin/tsdb/delete_series?authKey={KEY}",
+                                     data=urllib.parse.urlencode({"match[]": "ting_power_cut"}).encode())
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            assert resp.status == 204
+        assert export(store.url, "ting_power_cut") == []
+        post(store.url, f"ting_power_cut{{{labels}}} 1 1790560000000\nting_power_cut{{{labels}}} 0 1790560060000\n")
+        flush(store.url)
+        [series] = export(store.url, "ting_power_cut")
+        assert series["metric"]["serial"] == "TNG000002" and series["timestamps"] == [1790560000000, 1790560060000]
+    finally:
+        store.stop()

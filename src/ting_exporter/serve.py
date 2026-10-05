@@ -500,6 +500,7 @@ async def serve(cfg: Config, stop: asyncio.Event | None = None, clock: Clock | N
         stop.set()
         await _finish(session_tasks, SESSION_STOP_TIMEOUT)
         await _finish(background, TASK_STOP_TIMEOUT)
+        app.put(pipeline.finish())  # cuts still held for the cross-site check
         await outbox.close()
         save_state(app)
         results = {name: dict(p.results) for name, p in pushers.items()}

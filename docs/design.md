@@ -409,7 +409,14 @@ exporter infers them, where the facts are at hand:
 - The last-sample state is written to a small state file on shutdown, so a restart during a cut still infers it.
 - False positives: anything else that restarts the sensor (a firmware update) looks like a power return. Two
   sensors at different sites "restarting" within seconds of each other point to a shared cause (the cloud, or the
-  exporter's own stream), not to power at both sites. [TBD: not told apart yet (15)]
+  exporter's own stream), not to power at both sites. So a cut is held for 2 minutes of the sensor's own device
+  time after its return and dropped if a sensor at another site came back restarted within a minute of it (both
+  are counted as unattributed). A held cut is decided at the latest at shutdown or at the end of a replay, and
+  kept in the state file across a crash. One sensor's restart, or two at the same site, stays a cut. [Verified on
+  a recorded event: two sites back restarted 67 s later, seconds apart, no cut; a real 66-minute cut kept.]
+- Re-deriving the cuts after a change of these rules: delete the `ting_power_cut` series with the admin key, then
+  `import --only ting_power_cut` each recorder into each store. [Verified: VictoriaMetrics takes a deleted series
+  again.]
 
 ### 5.5 Rollups (vmalert) [Verified]
 - One group, `interval: 1m`, `eval_delay: 60s`. Rule names `ting:<metric without ting_>:<agg>_1m`, e.g.
@@ -1000,9 +1007,6 @@ rollup dashboard renders in under 3 s, `compare-stores` reports identical pushed
 ## 15. Open items and risks
 
 ### Open items
-- Two sensors at different sites "restarting" within seconds of each other are inferred as two power cuts
-  (5.4). Their shared cause is upstream (the cloud, or the exporter's own stream); they should count as
-  unattributed.
 - Whether the app client issues refresh tokens, the API key's lifetime and Cognito's lockout policy (2.1).
 
 ### Risks
