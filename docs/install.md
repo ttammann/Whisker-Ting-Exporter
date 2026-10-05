@@ -118,10 +118,11 @@ And services may bind an address the host does not have yet, so it does not matt
 printf 'net.ipv4.ip_nonlocal_bind = 1\n' | sudo tee /etc/sysctl.d/90-docker-nonlocal-bind.conf && sudo sysctl --system | grep nonlocal
 ```
 
-Check both, then reboot once when it suits you (Docker must be listed after the disk's mount):
+Check both (the disk's mount unit listed, and `1`; `sysctl` itself is not on a normal user's path on Debian), then
+reboot once when it suits you:
 
 ```bash
-systemctl show docker.service -p After | tr ' ' '\n' | grep -F "$(systemd-escape -p --suffix=mount "$DATA_ROOT")"; sysctl net.ipv4.ip_nonlocal_bind
+systemctl show docker.service -p After | tr ' ' '\n' | grep -F "$(systemd-escape -p --suffix=mount "$DATA_ROOT")"; cat /proc/sys/net/ipv4/ip_nonlocal_bind
 ```
 
 ## 5. Host: directories and secrets
