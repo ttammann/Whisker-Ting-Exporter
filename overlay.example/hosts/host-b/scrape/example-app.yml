@@ -1,0 +1,3 @@
+# Extra scrape jobs for host-b only, bundled into deploy/victoriametrics/scrape.d/: a plain list of jobs.
+- job_name: example-app
+  static_configs: [{targets: ["example-app:9100"], labels: {host: "%{TING_HOST}"}}]

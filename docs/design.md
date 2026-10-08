@@ -933,7 +933,8 @@ Lean choices:
   A post-commit hook pushes it to a readable copy elsewhere (`init --mirror`,
   `receive.denyCurrentBranch=updateInstead`) for the worst case. Private docs go into `overlay/docs/`.
 - The overlay holds **values only**, never copies or patches of base files. Extension points: per-host
-  `site.env` (non-secret values) and an optional `compose.override.yml`; extra vmalert rule files; a `site.toml`
+  `site.env` (non-secret values), an optional `compose.override.yml` and optional extra VictoriaMetrics scrape
+  jobs (`hosts/<host>/scrape/*.yml`, bundled into `deploy/victoriametrics/scrape.d/`); extra vmalert rule files; a `site.toml`
   for dashboard site names and colours; a runbook; tests of the host pair's invariants; leak-guard terms. The
   overlay declares a contract version.
 - Leak guard: pre-commit and pre-push hooks check added lines against terms derived from the overlay (serials,

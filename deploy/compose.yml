@@ -65,7 +65,7 @@ services:
                                                                 # port forward; the address must be up before Docker starts
     volumes:
       - {type: bind, source: "${DATA_ROOT}/victoriametrics", target: /storage, bind: {create_host_path: false}}
-      - ./victoriametrics/scrape.yml:/etc/victoriametrics/scrape.yml:ro
+      - ./victoriametrics:/etc/victoriametrics:ro      # scrape.yml and scrape.d/ (the overlay's extra jobs)
       - *ssd-guard
     mem_limit: 640m
     cpus: 1.0

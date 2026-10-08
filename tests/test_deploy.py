@@ -101,6 +101,16 @@ def test_the_exporter_takes_every_host_value_from_site_env(compose):
     assert jobs["ting-exporter"]["static_configs"][0]["labels"] == {"host": "%{TING_HOST}"}
 
 
+def test_extra_scrape_jobs_come_from_scrape_d(compose):
+    """The overlay's per-host jobs land in scrape.d/; the directory is mounted, and a base file keeps the glob matching."""
+    scrape = load("victoriametrics/scrape.yml")
+    assert scrape["scrape_config_files"] == ["/etc/victoriametrics/scrape.d/*.yml"]
+    assert load("victoriametrics/scrape.d/base.yml") == []
+    volumes = compose["services"]["victoriametrics"]["volumes"]
+    assert "./victoriametrics:/etc/victoriametrics:ro" in volumes
+    assert "-promscrape.config=/etc/victoriametrics/scrape.yml" in compose["services"]["victoriametrics"]["command"]
+
+
 def _metric_names(expr):
     names = set(re.findall(r"\b([a-z_][a-z0-9_]*:?[a-z0-9_:]*)\s*(?:\{|\[|\)|>|<|==|$| )", expr))
     return {n for n in names if n.startswith(("ting", "vm_", "up")) or n == "ALERTS"}

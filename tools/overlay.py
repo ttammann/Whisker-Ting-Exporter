@@ -13,6 +13,7 @@ copies or patches of base files:
     overlay.toml                 contract version, hosts (role, address, ssh, notify), leak-guard terms
     hosts/<host>/site.env        non-secret values for deploy/compose.yml (secrets stay on the host)
     hosts/<host>/compose.override.yml   optional, merged after the base files
+    hosts/<host>/scrape/*.yml    optional extra VictoriaMetrics jobs for that host (a plain list of jobs)
     rules/*.yml                  extra vmalert rule files
     site.toml                    dashboard site names and colours
     runbook.md, docs/            private notes
@@ -165,6 +166,13 @@ class Overlay:
         for path in sorted((self.dir / "rules").glob("*.yml")) if (self.dir / "rules").is_dir() else []:
             if (ROOT / "deploy" / "vmalert" / path.name).exists():
                 problems.append(f"rules/{path.name}: has the name of a base rule file; choose another")
+        for path in sorted(self.dir.glob("hosts/*/scrape/*.yml")):
+            where = path.relative_to(self.dir)
+            if (ROOT / "deploy" / "victoriametrics" / "scrape.d" / path.name).exists():
+                problems.append(f"{where}: has the name of a base scrape file; choose another")
+            first = next((ln for ln in path.read_text().splitlines() if ln.strip() and not ln.lstrip().startswith("#")), "")
+            if not (first.startswith("- ") or first.strip() == "[]"):
+                problems.append(f"{where}: must be a plain list of jobs (- job_name: ...), no scrape_configs key")
         return problems
 
     def _pair(self) -> list[str]:
@@ -296,6 +304,8 @@ def cmd_bundle(overlay: Overlay, host: str) -> int:
             extra["ting/compose.override.yml"] = override
         for rule in sorted((overlay.dir / "rules").glob("*.yml")) if (overlay.dir / "rules").is_dir() else []:
             extra[f"ting/deploy/vmalert/{rule.name}"] = rule
+        for job in sorted((overlay.dir / "hosts" / host / "scrape").glob("*.yml")):
+            extra[f"ting/deploy/victoriametrics/scrape.d/{job.name}"] = job
         for arcname, path in extra.items():
             out.add(path, arcname=arcname)
         info = tarfile.TarInfo("ting/BUNDLE")

@@ -47,6 +47,15 @@ def test_the_checks_catch_a_broken_pair(tool, example, host, edit, needle):
     assert any(needle in p for p in problems), problems
 
 
+def test_extra_scrape_files_are_plain_job_lists_with_their_own_names(tool, example):
+    scrape = example / "hosts" / "host-b" / "scrape"
+    (scrape / "base.yml").write_text("[]\n")  # would replace the base file in scrape.d/
+    (scrape / "wrapped.yml").write_text("scrape_configs:\n  - job_name: x\n")
+    problems = tool.Overlay(example).check()
+    assert any("base.yml: has the name of a base scrape file" in p for p in problems), problems
+    assert any("wrapped.yml: must be a plain list of jobs" in p for p in problems), problems
+
+
 def test_one_notifier_and_named_sites(tool, example):
     manifest = example / "overlay.toml"
     manifest.write_text(manifest.read_text().replace("notify = true", "notify = false"))
@@ -103,7 +112,8 @@ def test_bundle_prints_commands_and_connects_nowhere(tool, tmp_path):
         names = set(tar.getnames())
         site_env = tar.extractfile("ting/site.env").read().decode()
         stamp = tar.extractfile("ting/BUNDLE").read().decode()
-    assert {"ting/deploy/compose.yml", "ting/deploy/vmalert/site-rules.yml", "ting/deploy/grafana/ting-dashboard.json"} <= names
+    assert {"ting/deploy/compose.yml", "ting/deploy/vmalert/site-rules.yml", "ting/deploy/grafana/ting-dashboard.json",
+            "ting/deploy/victoriametrics/scrape.d/base.yml", "ting/deploy/victoriametrics/scrape.d/example-app.yml"} <= names
     assert "TING_HOST=host-b" in site_env and "host=host-b" in stamp
     assert "host-b" in (repo / "overlay" / "deployments.log").read_text()
     (repo / "deploy" / "compose.yml").write_text("changed\n")

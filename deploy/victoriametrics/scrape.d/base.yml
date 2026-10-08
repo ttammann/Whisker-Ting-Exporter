@@ -1,0 +1,3 @@
+# Extra scrape jobs come from the overlay (hosts/<host>/scrape/*.yml, bundled next to this file). This one is
+# empty so that scrape.yml's scrape_config_files pattern always matches a file.
+[]
