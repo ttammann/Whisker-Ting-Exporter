@@ -20,6 +20,10 @@ receivers:
         max_alerts: 20
 
 inhibit_rules:
+  # a power cut explains the sensors that went quiet at that site
+  - source_matchers: ['alertname="TingPowerOutage"']
+    target_matchers: ['alertname="TingSensorSilent"']
+    equal: [site]
   # a dead exporter explains silent sensors and missing rollups
   - source_matchers: ['alertname="TingExporterDown"']
     target_matchers: ['alertname=~"TingSensorSilent|TingRollupsMissing|TingDataIncomplete"']

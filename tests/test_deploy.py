@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from ting_exporter import rest, signals
+from ting_exporter import notifications, rest, signals
 
 yaml = pytest.importorskip("yaml")
 ROOT = Path(__file__).resolve().parent.parent
@@ -122,6 +122,7 @@ def test_alert_rules_use_existing_metrics():
     exporter = set(re.findall(r'"(ting_[a-z_]+)"', Path(selfmetrics.__file__).read_text()))
     known = exporter | {s.metric for s in signals.REGISTRY} | set(signals.DERIVED_METRICS) | rest.REST_METRICS
     known |= {s.record_name(r) for s in signals.REGISTRY for r in s.rollups}
+    known |= {notifications.OUTAGE_METRIC}
     known |= {"up", "vm_data_size_bytes", "vm_free_disk_space_bytes", "vm_storage_is_read_only", "vm_rows_invalid_total",
               "vm_rows_ignored_total"}
     rules = load("vmalert/ting-alerts.yml")["groups"][0]["rules"]
@@ -136,6 +137,34 @@ def test_alert_rules_use_existing_metrics():
             assert name in known, f"{rule['alert']}: {name} does not exist"
     incomplete = next(r for r in rules if r["alert"] == "TingDataIncomplete")
     assert incomplete["expr"].startswith("sum_over_time(") and "offset 2m" in incomplete["expr"]
+
+
+ALERT_TIERS = {  # design 9.1 tiers: critical = phone push, warning = HA bell, info = logbook only
+    "critical": {"TingExporterDown", "TingAuthHeld", "TingHazard", "RecordingsDiskCritical"},
+    "warning": {"TingSensorSilent", "TingPowerOutage", "TingAuthProblem", "TingPushLag", "TingDataDropped",
+                "TingOutboxWriteErrors", "TingRollupsMissing", "TingTaskCrashLoop", "VictoriaMetricsDataSizeHigh",
+                "RecordingsDiskLow", "VictoriaMetricsRowsRejected", "VmalertDown"},
+    "info": {"TingTimestampFallback", "TingDataIncomplete", "TingFlightRecorderErrors", "TingVoltageOutsideRangeA"},
+}
+
+
+def test_alert_tiers():
+    rules = {r["alert"]: r for r in load("vmalert/ting-alerts.yml")["groups"][0]["rules"]}
+    for severity, names in ALERT_TIERS.items():
+        for name in names:
+            assert rules[name]["labels"]["severity"] == severity, name
+    assert set(rules) == set().union(*ALERT_TIERS.values())
+    assert rules["TingExporterDown"]["for"] == "30m"
+    assert rules["TingAuthHeld"]["expr"] == "ting_auth_state == 2"
+    outage = rules["TingPowerOutage"]
+    assert "ting_power_outage" in outage["expr"] and "by (site)" in outage["expr"]
+
+
+def test_a_power_outage_explains_its_silent_sensors():
+    am = load("alertmanager/alertmanager.yml")
+    outage = [r for r in am["inhibit_rules"] if r["source_matchers"] == ['alertname="TingPowerOutage"']]
+    assert outage == [{"source_matchers": ['alertname="TingPowerOutage"'],
+                       "target_matchers": ['alertname="TingSensorSilent"'], "equal": ["site"]}]
 
 
 def test_alertmanager_inhibits_only_what_it_explains():

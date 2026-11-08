@@ -2,6 +2,8 @@
 # stores); only the notifying host sends them to Alertmanager, which delivers to the Home Assistant webhook.
 # The exporters' external health checks (TING_HEALTH_CHECKS) cover this chain itself being down.
 # tests/test_deploy.py checks that every metric named here exists.
+# Severity is the delivery tier (Home Assistant decides, design 9.1): critical = phone push + bell, warning = bell only,
+# info = logbook only. RESOLVED never pushes. tests/test_deploy.py ALERT_TIERS lists every rule's tier.
 groups:
   - name: ting_alerts
     interval: 1m
@@ -9,8 +11,8 @@ groups:
       # ---- exporter and stream --------------------------------------------------
       - alert: TingExporterDown
         expr: up{job="ting-exporter"} == 0
-        for: 5m
-        labels: {severity: warning}
+        for: 30m
+        labels: {severity: critical}
         annotations:
           summary: "ting-exporter on {{ $labels.host }} is not answering /metrics"
       - alert: TingSensorSilent
@@ -26,6 +28,13 @@ groups:
         labels: {severity: warning}
         annotations:
           summary: "Ting sign-in failing on {{ $labels.host }} (state {{ $value }}); 2 = held: write the right password to ~/stack/secrets/ting/ting_password"
+      - alert: TingAuthHeld
+        # 2 = held after repeated failures: no data at all until the password file is fixed
+        expr: ting_auth_state == 2
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "Ting sign-in held on {{ $labels.host }}: no data until ~/stack/secrets/ting/ting_password is right"
       - alert: TingPushLag
         expr: ting_push_lag_seconds > 600
         for: 15m
@@ -72,6 +81,12 @@ groups:
           summary: "ting-exporter task {{ $labels.task }} on {{ $labels.host }} keeps crashing ({{ $value | printf \"%.0f\" }} restarts in 15 min)"
 
       # ---- what Ting itself reports (REST, design 0.5) -----------------------------
+      - alert: TingPowerOutage
+        # from Ting's PowerOutage / CommunityPowerOutage notifications (notifications.py): 1 = site, 2 = community
+        expr: max by (site) (last_over_time(ting_power_outage[5m])) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "Power outage at site {{ $labels.site }}{{ if eq $value 2.0 }} (community-wide: other Ting homes too){{ end }}"
       - alert: TingHazard
         expr: max_over_time(ting_hazard_state[15m]) >= 3 or max_over_time(ting_fire_detected[15m]) > 0
         labels: {severity: critical}

@@ -114,8 +114,11 @@ class HealthWatch:
             return False, f"{type(err).__name__}"
 
     def payload(self, check: Check, status: str, now: float) -> dict:
+        # tiers (design 9.1): a dead local store, vmalert or Alertmanager silences every other alert (critical);
+        # an unreachable peer is the other site's problem, which the network monitoring pages for (warning)
+        severity = "warning" if check.name.startswith("peer") else "critical"
         labels = {"alertname": ALERT_NAME, "check": check.name, "host": self.host, "role": self.role,
-                  "severity": "critical"}
+                  "severity": severity}
         since = (check.resolved_from if status == "resolved" else check.failing_since) or now
         minutes = (now - since) / 60
         summary = (f"{self.host}: health check {check.name} ({check.url}) failing for {minutes:.0f} min ({check.reason}); "

@@ -85,3 +85,16 @@ async def test_an_undeliverable_notification_is_tried_again(tmp_path):
             await watch.check_once()
             clock.t += 61
     assert watch.notifications["error"] >= 2 and not watch.checks[0].firing
+
+
+def test_peer_checks_are_warnings_local_checks_critical(tmp_path):
+    """Alert tiers: a dead local store or vmalert silences every other alert (critical); an unreachable peer
+    is another site's problem, which the network monitoring pages for (warning)."""
+    from ting_exporter.health import Check
+
+    watch = HealthWatch(None, [("vm", "http://x/health"), ("peer-vm", "http://y/health")], tmp_path / "url",
+                        host="host-b", role="secondary", clock=StepClock())
+    local = watch.payload(Check("vm", "http://x/health"), "firing", 1_790_600_000.0)
+    peer = watch.payload(Check("peer-vm", "http://y/health"), "firing", 1_790_600_000.0)
+    assert local["alerts"][0]["labels"]["severity"] == "critical"
+    assert peer["alerts"][0]["labels"]["severity"] == "warning"
