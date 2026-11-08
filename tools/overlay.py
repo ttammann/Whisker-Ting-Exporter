@@ -282,7 +282,8 @@ def cmd_bundle(overlay: Overlay, host: str) -> int:
     commit = git("rev-parse", "--short=12", "HEAD").decode().strip()
     try:
         overlay_commit = git("rev-parse", "--short=12", "HEAD", cwd=overlay.dir).decode().strip()
-        dirty = bool(git("status", "--porcelain", cwd=overlay.dir).strip())
+        # only the overlay's own files: it may be tracked by a bigger private repo (net-stack)
+        dirty = bool(git("status", "--porcelain", "--", ".", cwd=overlay.dir).strip())
     except (subprocess.CalledProcessError, FileNotFoundError):
         overlay_commit, dirty = "none", True
     if dirty:

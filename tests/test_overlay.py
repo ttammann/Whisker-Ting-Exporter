@@ -119,3 +119,36 @@ def test_bundle_prints_commands_and_connects_nowhere(tool, tmp_path):
     (repo / "deploy" / "compose.yml").write_text("changed\n")
     dirty = subprocess.run(["python3", str(repo / "tools" / "overlay.py"), "bundle", "host-b"], cwd=repo, capture_output=True, text=True)
     assert dirty.returncode == 1 and "uncommitted changes" in dirty.stdout
+
+
+def test_bundle_with_the_overlay_tracked_by_an_outer_private_repo(tool, tmp_path):
+    """The net-stack layout: the overlay lives next to the public repo (tracked by an outer private repo) and is
+    reached through a symlink `overlay -> ../overlay`. Only the overlay's own changes count as uncommitted, and the
+    public repo does not see the symlink."""
+    git = lambda *a, cwd: subprocess.run(["git", "-C", str(cwd), "-c", "user.name=t", "-c", "user.email=t@example.org", *a],
+                                         check=True, capture_output=True)
+    outer = tmp_path / "net"
+    public = outer / "Ting" / "ting-exporter-v3"
+    for name in ("tools", "deploy", "overlay.example"):
+        shutil.copytree(ROOT / name, public / name)
+    shutil.copy(ROOT / ".gitignore", public / ".gitignore")
+    git("init", "-q", "-b", "main", cwd=public)
+    git("add", "-A", cwd=public)
+    git("commit", "-q", "-m", "public", cwd=public)
+    shutil.copytree(ROOT / "overlay.example", outer / "Ting" / "overlay")
+    (public / "overlay").symlink_to("../overlay")
+    (outer / ".gitignore").write_text("/Ting/ting-exporter-v3/\n")
+    (outer / "notes.md").write_text("one\n")
+    git("init", "-q", "-b", "main", cwd=outer)
+    git("add", "-A", cwd=outer)
+    git("commit", "-q", "-m", "outer", cwd=outer)
+    (outer / "notes.md").write_text("two\n")          # uncommitted, but not in the overlay
+
+    run = lambda: subprocess.run(["python3", str(public / "tools" / "overlay.py"), "bundle", "host-b"], cwd=public,
+                                 capture_output=True, text=True)
+    clean = run()
+    assert clean.returncode == 0, clean.stdout + clean.stderr
+    assert "uncommitted" not in clean.stdout
+    (outer / "Ting" / "overlay" / "site.toml").write_text((outer / "Ting" / "overlay" / "site.toml").read_text() + "\n")
+    dirty = run()
+    assert dirty.returncode == 0 and "the overlay has uncommitted changes" in dirty.stdout

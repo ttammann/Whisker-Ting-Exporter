@@ -7,5 +7,6 @@ dist/
 .env
 secrets/
 .DS_Store
-# the private overlay: its own git repository, never in this one (design 13.2)
-/overlay/
+# the private overlay: never in this repository (design 13.2). No trailing slash: it may be a symlink to an
+# overlay kept outside this tree (then tracked by an outer private repo).
+/overlay
