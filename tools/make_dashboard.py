@@ -295,28 +295,27 @@ def build() -> dict:
              "1 while voltage samples arrive within the stale limit (60 s). Offline = the sensor, its site's power or "
              "network, or the Ting cloud.", steps=[{"color": "red", "value": None}, {"color": "green", "value": 1}],
              mappings=status, color_mode="background"),
-        stat("Voltage now", 4, 4, [target(f"max by (site) (ting_voltage_volts{{{SEL}}})", "{{site}}", instant=True)], "volt",
+        stat("Voltage now", 0, 4, [target(f"max by (site) (ting_voltage_volts{{{SEL}}})", "{{site}}", instant=True)], "volt",
              "Latest RMS reading. ANSI C84.1 Range A 114-126 V: green inside, orange 110-114, red outside.",
              steps=VOLT_STEPS, decimals=1, mappings=NO_DATA, color_mode="background"),
         # Two tiles, not one with six values: with three sites the combined tile shrank its text to unreadable.
-        # Six tiles of 4 columns; delivery delay is a chart in the "Exporter and storage" row.
-        stat("Lowest in range", 8, 4, [
-            target(f"min by (site) (min_over_time(ting:voltage_volts:min_1m{{{SEL}}}[$__range]))", "{{site}}", "A", True)],
-            "volt", "Lowest 0.25 s reading in the selected range (from the 1-minute rollups).",
-            steps=VOLT_STEPS, decimals=1, mappings=NO_DATA, color_mode="background"),
-        stat("Highest in range", 12, 4, [
-            target(f"max by (site) (max_over_time(ting:voltage_volts:max_1m{{{SEL}}}[$__range]))", "{{site}}", "A", True)],
-            "volt", "Highest 0.25 s reading in the selected range (from the 1-minute rollups).",
-            steps=VOLT_STEPS, decimals=1, mappings=NO_DATA, color_mode="background"),
-        stat("THD now", 16, 4, [target(f"max by (site) (ting_thd_ratio{{{SEL}}})", "{{site}}", instant=True)], "percentunit",
+        # Delivery delay is a chart in the "Exporter and storage" row.
+        *(stat(f"{word} in range", 0, 4, [
+            target(f"{fn} by (site) ({fn}_over_time(ting:voltage_volts:{fn}_1m{{{SEL}}}[$__range]))", "{{site}}", "A", True)],
+            "volt", f"{word} 0.25 s reading in the selected range (from the 1-minute rollups).",
+            steps=VOLT_STEPS, decimals=1, mappings=NO_DATA, color_mode="background")
+          for word, fn in (("Lowest", "min"), ("Highest", "max"))),
+        stat("THD now", 0, 4, [target(f"max by (site) (ting_thd_ratio{{{SEL}}})", "{{site}}", instant=True)], "percentunit",
              "Total harmonic distortion of the voltage, latest (updates about every 30 s).", decimals=1),
-        settled(stat("Coverage in range", 20, 4, [target(
+        settled(stat("Coverage in range", 0, 4, [target(
             f"100 * sum by (site) (sum_over_time(ting:voltage_volts:count_1m{{{SEL}}}[$__range])) / ($__range_s * 4)",
             "{{site}}", instant=True)], "percent",
             "Share of the expected 4 samples per second that arrived. Gaps are outages at the site, in its network or in the cloud.",
             steps=[{"color": "red", "value": None}, {"color": "orange", "value": 95}, {"color": "green", "value": 99}], decimals=1,
             mappings=NO_DATA_TEXT)),
     ]
+    for i, tile in enumerate(panels):          # equal tiles side by side across the 24 columns
+        tile["gridPos"]["x"] = 4 * i
     panels.append(marker_key(5))
     y = 7
     mark_targets, mark_overrides = markers('site="$site"')
